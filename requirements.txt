@@ -1,0 +1,20 @@
+# local pipeline (ingest, link, graph, rag, eval)
+pandas
+pyarrow
+numpy
+pymupdf
+neo4j
+rapidfuzz
+anthropic>=2.6.0
+pydantic
+bm25s
+sentence-transformers>=6.2.0
+torch
+datasets>=3.0
+huggingface_hub
+
+# NER training (ner/train_encoder.py, ner/train_qlora.py)
+transformers
+accelerate
+peft
+# Kaggle GPU only, installed in the notebook: bitsandbytes (QLoRA), vllm (ner/infer_vllm.py)

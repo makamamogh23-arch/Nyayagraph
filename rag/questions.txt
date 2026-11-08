@@ -1,0 +1,12 @@
+# Smoke-test questions for rag.retrieve / rag.ask. One per line; "#" lines ignored.
+# Each covers a doctrine the corpus should answer, a provision lookup, or graph expansion.
+When can a conviction rest solely on circumstantial evidence?
+Is the last seen together theory enough on its own to convict for murder?
+Can a conviction be based solely on a dying declaration, and what makes it unreliable?
+What must the prosecution prove to raise the presumption of dowry death under Section 304B IPC?
+In what categories of cases can the High Court quash an FIR under Section 482 CrPC?
+What is the test for bail under Section 43D(5) of the UAPA?
+Is compliance with Section 50 of the NDPS Act mandatory for a search of a vehicle or a bag?
+Under Section 103 of the BNS, when does culpable homicide amount to murder?
+How should courts treat the evidence of related or interested witnesses?
+What did the Court hold in Sharad Birdhichand Sarda v. State of Maharashtra about the panchsheel of circumstantial evidence?

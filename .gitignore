@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+.DS_Store
+.env
+.impeccable/
+*.parquet
+
+# data stays local, except the reviewed old -> new section correspondence tables
+data/*
+!data/ref/
+data/ref/*
+!data/ref/*.csv
