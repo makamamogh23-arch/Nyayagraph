@@ -10,3 +10,9 @@ data/*
 !data/ref/
 data/ref/*
 !data/ref/*.csv
+
+# web app
+web/node_modules/
+web/dist/
+# machine-specific preview config (absolute paths)
+.claude/

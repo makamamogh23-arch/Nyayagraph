@@ -12,6 +12,8 @@ sentence-transformers>=6.2.0
 torch
 datasets>=3.0
 huggingface_hub
+fastapi>=0.115
+uvicorn[standard]>=0.32
 
 # NER training (ner/train_encoder.py, ner/train_qlora.py)
 transformers

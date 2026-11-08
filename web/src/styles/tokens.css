@@ -1,0 +1,112 @@
+/* Nyayagraph design tokens. Restrained palette: pure white reading surface, tinted neutrals toward the brand hue
+   (180, patina teal), one accent for citations, focus and primary actions. Dark mode follows the system. */
+
+:root {
+  color-scheme: light dark;
+
+  /* surfaces */
+  --bg: oklch(1 0 0);
+  --surface: oklch(0.978 0.004 180);        /* sources panel, quiet wells */
+  --surface-raised: oklch(1 0 0);
+  --surface-hover: oklch(0.955 0.008 180);
+  --rule: oklch(0.905 0.006 180);
+  --rule-strong: oklch(0.82 0.008 180);
+  --control-border: oklch(0.64 0.01 182);  /* edges of inputs and quiet buttons: 3.35:1 on bg (WCAG 1.4.11) */
+
+  /* ink: all pass 4.5:1 on --bg and --surface */
+  --ink: oklch(0.21 0.012 180);
+  --ink-2: oklch(0.38 0.012 180);
+  --muted: oklch(0.49 0.01 180);
+
+  /* accent: patina teal */
+  --accent: oklch(0.47 0.085 182);           /* links, markers: 6.5:1 on white (measured) */
+  --accent-strong: oklch(0.43 0.08 182);     /* filled buttons, white text 7.7:1 (measured) */
+  --accent-strong-hover: oklch(0.38 0.075 182);
+  --on-accent: oklch(1 0 0);
+  --accent-soft: oklch(0.955 0.022 182);     /* selected rows, marker fill */
+  --accent-soft-2: oklch(0.915 0.04 182);
+  --focus: oklch(0.55 0.12 182);
+
+  /* the quoted words, highlighted in the paragraph */
+  --mark: oklch(0.93 0.075 92);
+  --mark-ink: oklch(0.25 0.03 85);
+
+  /* states */
+  --danger: oklch(0.5 0.17 27);
+  --danger-soft: oklch(0.965 0.02 27);
+  --notice: oklch(0.47 0.09 75);
+  --notice-soft: oklch(0.97 0.025 85);
+
+  /* type */
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-prose: "Source Serif 4 Variable", "Source Serif 4", Georgia, "Times New Roman", serif;
+
+  /* fixed rem scale, ratio ~1.2 (product register) */
+  --text-xs: 0.8125rem;   /* 13 */
+  --text-sm: 0.875rem;    /* 14 */
+  --text-base: 1rem;      /* 16 UI body */
+  --text-prose: 1.125rem; /* 18 answer and judgment text */
+  --text-lg: 1.25rem;     /* 20 */
+  --text-xl: 1.5rem;      /* 24 */
+  --text-2xl: 1.875rem;   /* 30 */
+
+  /* space, 4px base */
+  --s-1: 0.25rem; --s-2: 0.5rem; --s-3: 0.75rem; --s-4: 1rem; --s-5: 1.5rem;
+  --s-6: 2rem; --s-7: 3rem; --s-8: 4rem;
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+
+  --shadow-pop: 0 1px 2px oklch(0.2 0.01 180 / 0.06), 0 8px 24px oklch(0.2 0.01 180 / 0.08);
+  --shadow-sheet: 0 -8px 32px oklch(0.2 0.01 180 / 0.16);
+
+  /* motion: state only, 150-250 ms, exponential ease-out */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --t-fast: 150ms;
+  --t: 200ms;
+
+  /* layering */
+  --z-sticky: 10;
+  --z-sheet-backdrop: 30;
+  --z-sheet: 31;
+  --z-toast: 40;
+
+  --measure: 68ch;
+  --panel-w: 26.25rem; /* 420px */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: oklch(0.185 0.008 182);
+    --surface: oklch(0.215 0.009 182);
+    --surface-raised: oklch(0.24 0.01 182);
+    --surface-hover: oklch(0.255 0.011 182);
+    --rule: oklch(0.31 0.01 182);
+    --rule-strong: oklch(0.4 0.012 182);
+    --control-border: oklch(0.52 0.012 182);
+
+    --ink: oklch(0.94 0.006 182);
+    --ink-2: oklch(0.82 0.008 182);
+    --muted: oklch(0.71 0.01 182);
+
+    --accent: oklch(0.8 0.085 182);
+    --accent-strong: oklch(0.76 0.085 182);
+    --accent-strong-hover: oklch(0.82 0.08 182);
+    --on-accent: oklch(0.18 0.01 182);
+    --accent-soft: oklch(0.28 0.03 182);
+    --accent-soft-2: oklch(0.33 0.045 182);
+    --focus: oklch(0.78 0.1 182);
+
+    --mark: oklch(0.42 0.07 88);
+    --mark-ink: oklch(0.97 0.02 90);
+
+    --danger: oklch(0.75 0.13 27);
+    --danger-soft: oklch(0.26 0.04 27);
+    --notice: oklch(0.82 0.1 80);
+    --notice-soft: oklch(0.26 0.03 80);
+
+    --shadow-pop: 0 1px 2px oklch(0 0 0 / 0.3), 0 8px 24px oklch(0 0 0 / 0.35);
+    --shadow-sheet: 0 -8px 32px oklch(0 0 0 / 0.45);
+  }
+}

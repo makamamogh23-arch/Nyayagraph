@@ -90,16 +90,13 @@ def render(message, hits: list[Hit]) -> tuple[str, list[dict]]:
     return "".join(out).strip(), sources
 
 
-def ask(question: str, retriever: Retriever, model: str = MODEL, effort: str = "medium") -> dict:
-    import anthropic
-
-    load_key()
-    t0 = time.time()
+def build_request(question: str, retriever: Retriever, model: str = MODEL, effort: str = "medium") -> dict:
+    """Retrieve, then build the Messages request. Shared by ask() and the web API (api/server.py).
+    Returns {search, hits, params}; params is None when nothing relevant was retrieved."""
     r = retriever.search(question)
     hits = r["hits"] + r["precedents"]
-    t_retrieve = time.time() - t0
     if not hits:
-        return {"question": question, "answer": "No relevant paragraphs found in the corpus.", "sources": []}
+        return {"search": r, "hits": hits, "params": None}
     content = [search_result(h) for h in hits]
     note = ""
     if r["provision_map"]:
@@ -108,11 +105,30 @@ def ask(question: str, retriever: Retriever, model: str = MODEL, effort: str = "
     elif r["provisions"]:
         note = "\n\nProvisions named in the question: " + "; ".join(p.replace("|", " s.") for p in r["provisions"])
     content.append({"type": "text", "text": question + note})
+    params = dict(model=model, max_tokens=8000, system=SYSTEM, thinking={"type": "adaptive"},
+                  output_config={"effort": effort}, messages=[{"role": "user", "content": content}])
+    return {"search": r, "hits": hits, "params": params}
+
+
+def log_answer(rec: dict) -> None:
+    os.makedirs(os.path.dirname(LOG), exist_ok=True)
+    with open(LOG, "a") as f:
+        f.write(json.dumps(rec) + "\n")
+
+
+def ask(question: str, retriever: Retriever, model: str = MODEL, effort: str = "medium") -> dict:
+    import anthropic
+
+    load_key()
+    t0 = time.time()
+    req = build_request(question, retriever, model, effort)
+    r, hits = req["search"], req["hits"]
+    t_retrieve = time.time() - t0
+    if req["params"] is None:
+        return {"question": question, "answer": "No relevant paragraphs found in the corpus.", "sources": []}
 
     client = anthropic.Anthropic()
-    with client.messages.stream(model=model, max_tokens=8000, system=SYSTEM,
-                                thinking={"type": "adaptive"}, output_config={"effort": effort},
-                                messages=[{"role": "user", "content": content}]) as stream:
+    with client.messages.stream(**req["params"]) as stream:
         msg = stream.get_final_message()
     answer, sources = render(msg, hits)
     p_in, p_out = PRICES.get(model, (0, 0))
@@ -125,9 +141,7 @@ def ask(question: str, retriever: Retriever, model: str = MODEL, effort: str = "
            "retrieved": [h.label for h in hits], "provisions": r["provisions"], "provision_map": r["provision_map"], "named_cases": r["named_cases"],
            "stop_reason": msg.stop_reason, "usage": {"in": u.input_tokens, "out": u.output_tokens},
            "cost_usd": round(cost, 5), "seconds": {"retrieve": round(t_retrieve, 1), "total": round(time.time() - t0, 1)}}
-    os.makedirs(os.path.dirname(LOG), exist_ok=True)
-    with open(LOG, "a") as f:
-        f.write(json.dumps(rec) + "\n")
+    log_answer(rec)
     return rec
 
 
