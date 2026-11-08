@@ -37,6 +37,7 @@ export interface NamedCase {
 export interface Context {
   provisions: string[]
   provision_map: string[]
+  related_map?: string[]
   named_cases: NamedCase[]
   sources: Source[]
   seconds: number

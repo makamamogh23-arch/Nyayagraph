@@ -32,6 +32,7 @@ export function Trail({ context, passages }: { context: Context; passages: numbe
   const mapped = corr.flatMap((c) => [c.old, c.next])
   // 'BSA s.23' is already shown inside 'Evidence Act s.27 = BSA s.23 proviso'
   const plain = context.provisions.map(provisionLabel).filter((p) => !mapped.some((m) => m === p || m.startsWith(`${p}(`) || m.startsWith(`${p} `)))
+  const defs = (context.related_map ?? []).map(parseCorrespondence).filter(Boolean) as { old: string; next: string; label?: string }[]
   const judgments = new Set(context.sources.map((s) => s.case_id)).size
   const precedents = context.sources.filter((s) => s.precedent).length
 
@@ -48,6 +49,19 @@ export function Trail({ context, passages }: { context: Context; passages: numbe
             ))}
             {plain.map((p) => (
               <span key={p} className="chip">{p}</span>
+            ))}
+          </dd>
+        </div>
+      )}
+      {defs.length > 0 && (
+        <div className="trail-row">
+          <dt>Defined in</dt>
+          <dd className="trail-chips">
+            {defs.map((c) => (
+              <span key={c.old + c.next} className="chip" title="The section defining the offence, from the same comparison tables">
+                {c.label && <span className="chip-note">{c.label}: </span>}
+                {c.old} <span className="chip-eq" aria-label="corresponds to">=</span> {c.next}
+              </span>
             ))}
           </dd>
         </div>

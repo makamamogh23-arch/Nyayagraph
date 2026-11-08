@@ -59,6 +59,27 @@ three-Judge Parbatbhai Aahir line; dowry death is equal (Jogendra's four prerequ
 circumstantial-evidence answer is equal but different (gains Satye Singh, loses the Padala Veera Reddy four-part
 test); BNS s.103 is unchanged in substance. No answer invented a provision number or cited outside the paragraphs.
 
+## Free checks on logged answers (`results/answer_checks.md`)
+
+`python -m eval.answer_checks`, deterministic, no model calls, over the 10 logged answers that kept their raw blocks
+(6 Opus, 4 Haiku):
+
+- 131 cited passages: 120 (91.6%) are word-for-word text of the paragraph they cite, 0 are text of a different
+  paragraph (no misattributed quotations), 11 are paraphrase or commentary.
+- Explicit quotation marks: 5 of 5 quoted spans in cited passages match the cited paragraph exactly.
+- Section numbers: none stated that is absent from the question, the correspondence notes and the paragraphs read.
+- Weakest: the Haiku (Quick) answer on UAPA bail cites only 10% of its prose and quotes nothing verbatim.
+
+Limits: 10 answers; paraphrased passages need a model to judge support, which this check does not do.
+
+## Definition sections
+
+A question naming a punishment section now also gets the section that defines the offence, with its BNS counterpart
+(`DEFINED_BY` in `rag/retrieve.py`, reviewed by hand): "Section 103 BNS" adds "IPC s.299 (culpable homicide) =
+BNS s.100; IPC s.300 (murder) = BNS s.101", which the first answer to that question said it lacked. Definitions go to
+the model and the website's trail only; they are not used to rank paragraphs, and the retrieval benchmark is
+unchanged (MRR 0.640 question, 0.597 newact).
+
 ## Old Code -> new Sanhita mappings (MAPS_TO)
 
 All three come from one source series, the CAPT Bhopal comparison tables (keralaprisons.gov.in):

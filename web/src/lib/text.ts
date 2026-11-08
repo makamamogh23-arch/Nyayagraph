@@ -132,10 +132,10 @@ const ACTS: Record<string, string> = {
 export const shortAct = (act: string) => ACTS[act] ?? act
 
 /** 'Code of Criminal Procedure, 1973 s.482 = Bharatiya Nagarik Suraksha Sanhita, 2023 s.528' -> parts. */
-export function parseCorrespondence(line: string): { old: string; next: string } | null {
-  const m = line.match(/^(.*?) s\.(\S+) = (.*?) s\.(\S+(?: proviso)?)$/)
+export function parseCorrespondence(line: string): { old: string; next: string; label?: string } | null {
+  const m = line.match(/^(.*?) s\.(\S+)(?: \(([^)]+)\))? = (.*?) s\.(\S+(?: proviso)?)$/)
   if (!m) return null
-  return { old: `${shortAct(m[1])} s.${m[2]}`, next: `${shortAct(m[3])} s.${m[4]}` }
+  return { old: `${shortAct(m[1])} s.${m[2]}`, next: `${shortAct(m[4])} s.${m[5]}`, label: m[3] }
 }
 
 export function provisionLabel(p: string): string {

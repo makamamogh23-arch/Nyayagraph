@@ -32,6 +32,36 @@ PER_CASE, TOP_PARAS, TOP_PRECEDENTS, MAX_WORDS = 3, 12, 4, 350
 # matches a literally named section. A PageRank prior showed no gain and is off.
 W_PARA_PROV, W_CASE_PROV, W_PAGERANK, W_NAMED_CASE = 0.020, 0.008, 0.0, 0.030
 OLD_ACTS = {"Indian Penal Code, 1860", "Code of Criminal Procedure, 1973", "Indian Evidence Act, 1872"}
+IPC, BNS = "Indian Penal Code, 1860", "Bharatiya Nyaya Sanhita, 2023"
+
+# IPC punishment sections -> the IPC sections that define the offence (reviewed by hand). A question about
+# "Section 103 BNS" (= IPC 302, punishment for murder) needs the definition in IPC 300 (= BNS 101) to be answered.
+DEFINED_BY = {
+    "302": ("299", "300"), "304": ("299", "300"), "307": ("300",), "308": ("299",),
+    "306": ("107",), "120B": ("120A",), "147": ("146",), "148": ("146",),
+    "323": ("319",), "324": ("319",), "325": ("320",), "326": ("320",),
+    "341": ("339",), "342": ("340",), "352": ("350",), "353": ("350",),
+    "363": ("359", "360", "361"), "364": ("359", "362"), "365": ("359", "362"), "366": ("359", "362"),
+    "376": ("375",),
+    "379": ("378",), "380": ("378",), "381": ("378",), "382": ("378",),
+    "384": ("383",), "385": ("383",), "386": ("383",), "387": ("383",),
+    "392": ("390",), "393": ("390",), "394": ("390",), "397": ("390",),
+    "395": ("391",), "396": ("391",), "399": ("391",), "402": ("391",),
+    "406": ("405",), "407": ("405",), "408": ("405",), "409": ("405",),
+    "417": ("415",), "418": ("415",), "419": ("415",), "420": ("415",),
+    "427": ("425",), "435": ("425",), "436": ("425",), "448": ("442",), "452": ("442",),
+    "465": ("463",), "466": ("463",), "467": ("463", "464"), "468": ("463", "464"), "471": ("464",),
+    "500": ("499",), "506": ("503",),
+}
+DEFINITION_OF = {
+    "107": "abetment", "120A": "criminal conspiracy", "146": "rioting", "299": "culpable homicide", "300": "murder",
+    "319": "hurt", "320": "grievous hurt", "339": "wrongful restraint", "340": "wrongful confinement",
+    "350": "criminal force", "359": "kidnapping", "360": "kidnapping from India",
+    "361": "kidnapping from lawful guardianship", "362": "abduction", "375": "rape", "378": "theft",
+    "383": "extortion", "390": "robbery", "391": "dacoity", "405": "criminal breach of trust", "415": "cheating",
+    "425": "mischief", "442": "house-trespass", "463": "forgery", "464": "making a false document",
+    "499": "defamation", "503": "criminal intimidation",
+}
 
 STOP = set("""a an the of and or to in on for by with at from as is are was were be been being that this these those
 it its which who whom whose what when where why how under section sections act code court case cases accused
@@ -108,14 +138,17 @@ class Retriever:
                                    normalize_embeddings=True)
 
     # --- query analysis ----------------------------------------------------------------------------------------
-    def provisions(self, q: str) -> tuple[list[str], list[str]]:
+    def provisions(self, q: str) -> tuple[list[str], list[str], list[str]]:
         """Provision pids named in the question plus their old <-> new counterparts (IPC/BNS, CrPC/BNSS, IEA/BSA),
-        and readable correspondence lines for the prompt ('Indian Penal Code, 1860 s.302 = Bharatiya Nyaya
-        Sanhita, 2023 s.103(1)')."""
+        readable correspondence lines for the prompt ('Indian Penal Code, 1860 s.302 = Bharatiya Nyaya Sanhita,
+        2023 s.103(1)'), and lines for the IPC sections that define the offences those provisions punish
+        ('Indian Penal Code, 1860 s.300 (murder) = Bharatiya Nyaya Sanhita, 2023 s.101'). Definitions are context
+        for the answer only; they are not used to rank paragraphs (rag_bench: boosting provisions the question did
+        not name lowers MRR)."""
         from link.provisions import extract
         pids = {f"{r['act']}|{r['section']}" for r in extract(q, {}) if r["act"]}
         if not pids:
-            return [], []
+            return [], [], []
         found, lines = set(pids), []
         with self.driver.session() as s:
             rows = s.run("""UNWIND $pids AS pid MATCH (p:Provision {pid: pid})-[e:MAPS_TO]-(o:Provision)
@@ -123,12 +156,34 @@ class Retriever:
                          pids=sorted(pids))
             for r in rows:
                 found.update([r["old"], r["new"]])
-                old, new = (x.replace("|", " s.") for x in (r["old"], r["new"]))
-                sub = r["sub"] or ""
-                line = f"{old} = {new}{'' if not sub or sub.startswith('(') else ' '}{sub}"
-                if line not in lines:
-                    lines.append(line)
-        return sorted(found), lines
+                lines.append(self._corr_line(r["old"], r["new"], r["sub"] or ""))
+        ipc = sorted({p.split("|")[1] for p in found if p.startswith(IPC + "|")})
+        related = []
+        for sec in ipc:
+            for d in DEFINED_BY.get(sec, ()):
+                if f"{IPC}|{d}" in found:
+                    continue
+                for bns, sub in self.ipc_bns.get(d, []):
+                    line = self._corr_line(f"{IPC}|{d}", f"{BNS}|{bns}", sub, DEFINITION_OF.get(d))
+                    if line not in related:
+                        related.append(line)
+        return sorted(found), list(dict.fromkeys(lines)), related
+
+    @staticmethod
+    def _corr_line(old: str, new: str, sub: str, label: str | None = None) -> str:
+        o, n = (x.replace("|", " s.") for x in (old, new))
+        if label:
+            o += f" ({label})"
+        return f"{o} = {n}{'' if not sub or sub.startswith('(') else ' '}{sub}"
+
+    @cached_property
+    def ipc_bns(self) -> dict:
+        """IPC section -> [(BNS section, sub-section)] from the reviewed correspondence table."""
+        m = pd.read_csv("data/ref/ipc_bns.csv", dtype=str).fillna("")
+        out: dict = {}
+        for r in m.itertuples():
+            out.setdefault(r.ipc, []).append((r.bns, r.bns_sub))
+        return out
 
     @cached_property
     def all_titles(self) -> dict:
@@ -235,7 +290,7 @@ class Retriever:
         """use_bm25 / use_dense / use_graph switch components off for ablations (eval/rag_bench.py); rerank orders
         the top RERANK_DEPTH paragraphs with a cross-encoder before the per-case cap."""
         qv = self.embed_query(q)
-        prov, prov_map = self.provisions(q) if use_graph else ([], [])
+        prov, prov_map, related = self.provisions(q) if use_graph else ([], [], [])
         named_prov = set(self.provisions_named(q)) if use_graph else set()
         # bridge one way only: a question in new-Act terms (BNSS 528) needs the judgments citing the old section
         # (CrPC 482); the reverse would boost the few recent judgments over the better older matches
@@ -319,7 +374,8 @@ class Retriever:
             h.cited_from = src.label
             prec.append(h)
             have.add(dst)
-        return {"question": q, "provisions": prov, "provision_map": prov_map, "named_cases": named, "hits": hits,
+        return {"question": q, "provisions": prov, "provision_map": prov_map, "related_map": related,
+                "named_cases": named, "hits": hits,
                 "precedents": prec}
 
 

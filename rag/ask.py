@@ -104,6 +104,9 @@ def build_request(question: str, retriever: Retriever, model: str = MODEL, effor
                 "tables in the graph): " + "; ".join(r["provision_map"]))
     elif r["provisions"]:
         note = "\n\nProvisions named in the question: " + "; ".join(p.replace("|", " s.") for p in r["provisions"])
+    if r.get("related_map"):
+        note += ("\n\nSections defining the offences in those provisions, with their BNS counterparts (same tables): "
+                 + "; ".join(r["related_map"]))
     content.append({"type": "text", "text": question + note})
     params = dict(model=model, max_tokens=8000, system=SYSTEM, thinking={"type": "adaptive"},
                   output_config={"effort": effort}, messages=[{"role": "user", "content": content}])

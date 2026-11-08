@@ -19,6 +19,7 @@ import os
 import re
 import threading
 import time
+from contextlib import asynccontextmanager
 from functools import lru_cache
 
 import pandas as pd
@@ -32,7 +33,22 @@ from rag.ask import PRICES, build_request, load_key, log_answer
 MODES = {"full": ("claude-opus-5-5", "medium"), "quick": ("claude-haiku-5-5", "low")}
 DIST = "web/dist"
 
-app = FastAPI(title="Nyayagraph", docs_url="/api/docs", openapi_url="/api/openapi.json")
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    """Load the search index in the background so the first question doesn't pay for it."""
+    def go():
+        try:
+            tables()
+            retriever()
+        except Exception:
+            pass  # reported on first use (e.g. Neo4j not running)
+    threading.Thread(target=go, daemon=True).start()
+    yield
+
+
+app = FastAPI(title="Nyayagraph", docs_url="/api/docs", openapi_url="/api/openapi.json", lifespan=lifespan)
 
 
 # --- display helpers --------------------------------------------------------------------------------------------
@@ -115,18 +131,6 @@ def retriever():
         return _retriever
 
 
-@app.on_event("startup")
-def warm() -> None:
-    """Load the search index in the background so the first question doesn't pay for it."""
-    def go():
-        try:
-            tables()
-            retriever()
-        except Exception:
-            pass  # reported on first use (e.g. Neo4j not running)
-    threading.Thread(target=go, daemon=True).start()
-
-
 @lru_cache(maxsize=1)
 def tables() -> dict:
     cases = pd.read_parquet("data/graph/nodes_case.parquet")
@@ -207,7 +211,8 @@ def ask_stream(question: str, mode: str):
     named = [{"case_id": cid, "label": case_label(cid), "title": display_title(r.all_titles.get(cid))}
              for cid in search["named_cases"]]
     yield sse("context", {"provisions": [p.replace("|", " s.") for p in search["provisions"]],
-                          "provision_map": search["provision_map"], "named_cases": named,
+                          "provision_map": search["provision_map"], "related_map": search.get("related_map", []),
+                          "named_cases": named,
                           "sources": [source_json(i, h) for i, h in enumerate(hits)],
                           "seconds": round(time.time() - t0, 1)})
     if req["params"] is None:
