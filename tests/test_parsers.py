@@ -10,6 +10,8 @@ from api.server import display_key, display_title
 from eval.rag_bench import new_act_maps, new_act_query
 from link.acts import YEAR_TYPOS, merge_variants, normalize, strip_prefix
 from link.citations import extract as cites
+from ner.corpus_entities import clean_person, normalize_court, person_key, pw_number, side_of
+from ner.corpus_inputs import pieces
 from link.law_map import CHECKS
 from link.provisions import IPC_ONLY, extract, fix_ipc_ocr
 from link.resolve import name_before, parties
@@ -181,3 +183,71 @@ def test_display_title(raw, shown):
 ])
 def test_display_key(key, shown):
     assert display_key(key) == shown
+
+
+# --- fine-tuned NER post-processing ----------------------------------------------------------------------------
+
+@pytest.mark.parametrize("raw, name", [
+    ("Ms. V. Mohana", "V. Mohana"),
+    ("K. Radhakrishnan, Sr. Adv", "K. Radhakrishnan"),
+    ("Tushar Mehta, SG", "Tushar Mehta, SG"),         # unknown designations are kept, not guessed at
+    ("Mr. Huzefa Ahmadi, Sr. Advs.", "Huzefa Ahmadi"),
+    ("CRLP No. 3850", None),                           # digits: not a person
+    ("Ms.", None),
+])
+def test_clean_person(raw, name):
+    assert clean_person(raw) == name
+
+
+def test_person_key_ignores_initial_spacing():
+    assert person_key("K.K. Rai") == person_key("K. K. Rai") == person_key("K K RAI")
+
+
+@pytest.mark.parametrize("raw, court, seat", [
+    ("High Co mi of Punjab & Haryana at Chandigarh", "High Court of Punjab and Haryana", "Chandigarh"),   # OCR
+    ("High Com1 of Gujarat, atAhmedabad", "High Court of Gujarat", None),
+    ("High Court ofM. P", "High Court of Madhya Pradesh", None),
+    ("High Court of Judicature at Bombay, Nagpur Bench, Nagpur", "High Court of Judicature at Bombay", "Nagpur"),
+    ("Madurai Bench of Madras High Court", "High Court of Judicature at Madras", "Madurai"),
+    ("High Court of Judicature at Hyderabad for the State of Telangana and the State of Andhra Pradesh",
+     "High Court of Judicature at Hyderabad", None),
+    ("Armed Forces Tribunal, Regional Bench, Chennai", "Armed Forces Tribunal, Regional Bench, Chennai", None),
+    ("Parliament", None, None),
+    ("High Court", None, None),                        # which one is unknown: no edge
+])
+def test_normalize_court(raw, court, seat):
+    assert normalize_court(raw) == (court, seat)
+
+
+@pytest.mark.parametrize("word, side", [("Appellant", "appellant"), ("appeijant", "appellant"),
+                                        ("Respondents", "respondent"), ("repondent", "respondent"),
+                                        ("appearing parties", "parties"), ("Petitioner", "appellant")])
+def test_side_of(word, side):
+    assert side_of(word) == side
+
+
+def test_pieces_cover_text_in_order():
+    text = " ".join(f"Sentence number {i} is here." for i in range(300))
+    ps = pieces(text, 500)
+    assert all(len(p) <= 750 for _, p in ps)
+    assert all(text[o:o + len(p)] == p for o, p in ps)   # offsets point back into the source text
+    assert [o for o, _ in ps] == sorted(o for o, _ in ps)
+
+
+@pytest.mark.parametrize("text, name, pw", [
+    ("PW-2 Rayajul Haq, PW-3 Sadaqat Ali and PW-4 Sajjad Ahmad", "Rayajul Haq", 2),
+    ("PW-2 Rayajul Haq, PW-3 Sadaqat Ali and PW-4 Sajjad Ahmad", "Sadaqat Ali", 3),
+    ("wife of Hirabhai (PW-5), Ramanbhai (PW-6) and Nandaben", "Ramanbhai", 6),
+    ("declared hostile: Parvati Devi, PW 1 (mother of the deceased)", "Parvati Devi", 1),
+    ("PW-1, Kishore Kumar, the brother of the deceased", "Kishore Kumar", 1),
+    ("evidence of Pritam Singh (P.W. 10) and Sajjan Singh", "Pritam Singh", 10),
+    ("the deceased Ramesh was alone", "Ramesh", None),
+    ("Gurditu Ram-PW-2, Sohan Lal-PW-3, Badri Ram-PW-4", "Sohan Lal", 3),
+    ("Prasad, PW-3, Birendra Prasad, PW-5, Salil Bihari Lal, PW-8 and", "Birendra Prasad", 5),
+    ("Charan Singh, PW- 1, Gajpal, PW-2, Tedha, PW-3 and Nepal", "Gajpal", 2),
+    ("depositions of PW-14 Dr. Manju Purohit and PW-21 Dr. Chetna", "Manju Purohit", 14),
+    ("PW-13 T.R. Mahadevappa, PW-14 C. Chandrappa, PW-15 S. H. Param", "C. Chandrappa", 14),
+])
+def test_pw_number(text, name, pw):
+    s = text.index(name)
+    assert pw_number(text, s, s + len(name), name) == pw

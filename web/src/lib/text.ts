@@ -161,6 +161,14 @@ export function citationText(s: Pick<Source, 'title' | 'case_id' | 'para_no' | '
   return `${s.title}, ${s.case_id}${report}, ¶ ${s.para_no}${op}`
 }
 
+/** '14.11.2013' or '14-11-2013' (as printed in headnotes) -> '14 November 2013'; anything else unchanged. */
+export function formatDmy(d: string | null): string | null {
+  if (!d) return null
+  const m = d.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/)
+  if (!m || Number(m[2]) < 1 || Number(m[2]) > 12) return d
+  return `${Number(m[1])} ${MONTHS[Number(m[2]) - 1]} ${m[3]}`
+}
+
 export const nf = new Intl.NumberFormat('en-IN')
 
 export function caseHref(caseId: string, opinion?: number, para?: number): string {

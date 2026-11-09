@@ -1169,6 +1169,66 @@ mark {
   color: var(--muted);
 }
 
+.side-note {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  max-width: 40ch;
+}
+
+.fact-sub {
+  font-weight: 400;
+  color: var(--ink-2);
+}
+
+.counsel-group {
+  display: grid;
+  gap: var(--s-1);
+  margin-top: var(--s-2);
+}
+
+.counsel-side {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.counsel-list,
+.witness-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: var(--s-1);
+  font-size: var(--text-sm);
+}
+
+.counsel-sr {
+  margin-left: 0.35em;
+  padding: 0 0.3em;
+  border: 1px solid var(--control-border);
+  border-radius: 3px;
+  font-size: var(--text-xs);
+  text-decoration: none;
+  color: var(--ink-2);
+}
+
+.counsel-n {
+  color: var(--muted);
+}
+
+.witness-list li {
+  display: grid;
+  grid-template-columns: 3.6rem minmax(0, 1fr);
+  column-gap: var(--s-2);
+}
+
+.witness-pw {
+  color: var(--muted);
+}
+
+.witness-list .case-link-meta {
+  grid-column: 2;
+}
+
 .prov-list,
 .case-links {
   list-style: none;

@@ -142,6 +142,30 @@ export interface Paragraph {
   text: string
 }
 
+/** Entities from the fine-tuned NER pass (ner/corpus_entities.py); empty lists until it is loaded. */
+export interface AppealFrom {
+  court: string
+  bench: string | null
+  date: string | null
+  case_numbers: string[]
+  source: string
+}
+
+export type Side = 'appellant' | 'respondent' | 'parties' | 'intervenor' | 'complainant' | 'amicus' | 'other'
+
+export interface Counsel {
+  name: string
+  side: Side
+  senior: boolean
+  cases: number
+}
+
+export interface Witness {
+  name: string
+  pw: number
+  paras: string[]
+}
+
 export interface CaseDetail {
   case_id: string
   in_corpus: boolean
@@ -156,6 +180,9 @@ export interface CaseDetail {
   provisions: Provision[]
   cites: CaseLink[]
   cited_by: CaseLink[]
+  appeal_from?: AppealFrom[]
+  counsel?: Counsel[]
+  witnesses?: Witness[]
   paragraphs: Paragraph[]
   opinions: number[]
 }

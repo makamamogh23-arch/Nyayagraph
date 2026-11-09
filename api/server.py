@@ -15,6 +15,7 @@
 Run: uvicorn api.server:app --port 8000   (dev: npm run dev in web/, which proxies /api here)
 """
 import json
+import logging
 import os
 import re
 import threading
@@ -27,6 +28,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+# Neo4j logs a warning for every query naming a relationship type not loaded yet (e.g. WITNESS_IN before the
+# witness pass): those queries are expected to return nothing
+logging.getLogger("neo4j.notifications").setLevel(logging.ERROR)
 
 from rag.ask import PRICES, build_request, load_key, log_answer
 
@@ -314,6 +319,18 @@ def case(case_id: str):
                                     RETURN d.case_id AS case_id, d.title AS title, d.year AS year, d.keys AS keys,
                                            d.in_corpus AS in_corpus, e.paras AS paras
                                     ORDER BY size(e.paras) DESC, d.year DESC""", id=case_id).data()
+            # from the fine-tuned NER pass (ner/corpus_entities.py); empty when that pass has not been loaded
+            out["appeal_from"] = s.run("""MATCH (c:Case {case_id: $id})-[e:APPEAL_FROM]->(k:Court)
+                                          RETURN k.name AS court, e.bench AS bench, e.date AS date,
+                                                 e.case_numbers AS case_numbers, e.source AS source""",
+                                       id=case_id).data()
+            out["counsel"] = s.run("""MATCH (l:Lawyer)-[e:APPEARED_IN]->(c:Case {case_id: $id})
+                                      OPTIONAL MATCH (l)-[o:APPEARED_IN]->(:Case)
+                                      RETURN l.name AS name, e.side AS side, e.senior AS senior, count(o) AS cases
+                                      ORDER BY e.side, e.senior DESC, cases DESC, name""", id=case_id).data()
+            out["witnesses"] = s.run("""MATCH (w:Witness)-[e:WITNESS_IN]->(c:Case {case_id: $id})
+                                        RETURN w.name AS name, w.pw AS pw, e.paras AS paras ORDER BY w.pw""",
+                                     id=case_id).data()
             out["cited_by"] = s.run("""MATCH (s:Case)-[e:CITES]->(c:Case {case_id: $id})
                                        RETURN s.case_id AS case_id, s.title AS title, s.year AS year, e.paras AS paras
                                        ORDER BY s.year DESC, s.case_id""", id=case_id).data()

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { getCase, HttpError, type CaseDetail, type CaseLink, type Provision } from '../api'
+import { getCase, HttpError, type AppealFrom, type CaseDetail, type CaseLink, type Counsel, type Provision, type Side, type Witness } from '../api'
 import { useSession } from '../state'
-import { caseHref, formatDate, nf, shortAct } from '../lib/text'
+import { caseHref, formatDate, formatDmy, nf, shortAct } from '../lib/text'
 
 export default function CasePage() {
   const { id = '' } = useParams()
@@ -88,6 +88,7 @@ function Judgment({ data, hash, back }: { data: CaseDetail; hash: string; back: 
           {date && <div><dt>Decided</dt><dd>{date}</dd></div>}
           {judges.length > 0 && <div><dt>{data.judges.authored.length ? 'Author' : 'Bench'}</dt><dd>{judges.join(', ')}</dd></div>}
           {data.disposal && <div><dt>Outcome</dt><dd>{data.disposal}</dd></div>}
+          {data.appeal_from?.[0] && <div><dt>Appeal from</dt><dd><AppealFromText a={data.appeal_from[0]} /></dd></div>}
         </dl>
       </header>
 
@@ -118,6 +119,8 @@ function Judgment({ data, hash, back }: { data: CaseDetail; hash: string; back: 
           <Provisions items={data.provisions} />
           <CaseList title="Cites" empty="No citations to other judgments were found in the text." items={data.cites} anchorCase={data.case_id} showParas />
           <CaseList title="Cited by" empty="No later judgment in the collection cites this one." items={data.cited_by} showParas linkParas />
+          {(data.witnesses?.length ?? 0) > 0 && <Witnesses items={data.witnesses!} caseId={data.case_id} />}
+          {(data.counsel?.length ?? 0) > 0 && <CounselList items={data.counsel!} />}
         </aside>
       </div>
     </div>
@@ -143,6 +146,81 @@ function Precedent({ data, back }: { data: CaseDetail; back: React.ReactNode }) 
         <CaseList title="Cited by" empty="No judgment in the collection cites it." items={data.cited_by} showParas linkParas initial={30} />
       </div>
     </div>
+  )
+}
+
+function AppealFromText({ a }: { a: AppealFrom }) {
+  const date = formatDmy(a.date)
+  return (
+    <>
+      {a.court}
+      {a.bench && <span className="fact-sub">, {a.bench} bench</span>}
+      {(a.case_numbers.length > 0 || date) && (
+        <span className="fact-sub num">
+          {' · '}
+          {a.case_numbers.slice(0, 2).join(', ')}
+          {a.case_numbers.length > 2 && ` +${a.case_numbers.length - 2}`}
+          {date && `${a.case_numbers.length ? ', ' : ''}decided ${date}`}
+        </span>
+      )}
+    </>
+  )
+}
+
+const SIDES: { key: Side; label: string }[] = [
+  { key: 'appellant', label: 'For the appellant' },
+  { key: 'respondent', label: 'For the respondent' },
+  { key: 'parties', label: 'For the parties' },
+  { key: 'complainant', label: 'For the complainant' },
+  { key: 'intervenor', label: 'For the intervenor' },
+  { key: 'amicus', label: 'Amicus curiae' },
+  { key: 'other', label: 'Side not stated' },
+]
+
+const MODEL_NOTE = 'Extracted from the headnote by the fine-tuned Qwen2.5-7B NER model'
+
+function CounselList({ items }: { items: Counsel[] }) {
+  return (
+    <section className="side-block" aria-labelledby="counsel-h">
+      <h2 id="counsel-h" className="side-title">Counsel <span className="side-count num">{items.length}</span></h2>
+      <p className="side-note">{MODEL_NOTE}.</p>
+      {SIDES.map(({ key, label }) => {
+        const group = items.filter((c) => c.side === key)
+        if (!group.length) return null
+        return (
+          <div key={key} className="counsel-group">
+            <h3 className="counsel-side">{label}</h3>
+            <ul className="counsel-list">
+              {group.map((c) => (
+                <li key={c.name}>
+                  {c.name}
+                  {c.senior && <abbr className="counsel-sr" title="Senior Advocate">Sr.</abbr>}
+                  {c.cases > 1 && <span className="counsel-n num"> · {c.cases} cases</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )
+      })}
+    </section>
+  )
+}
+
+function Witnesses({ items, caseId }: { items: Witness[]; caseId: string }) {
+  return (
+    <section className="side-block" aria-labelledby="wit-h">
+      <h2 id="wit-h" className="side-title">Prosecution witnesses <span className="side-count num">{items.length}</span></h2>
+      <p className="side-note">Extracted from the judgment text by the fine-tuned Qwen2.5-7B NER model.</p>
+      <ul className="witness-list">
+        {items.map((w) => (
+          <li key={w.pw}>
+            <span className="witness-pw num">PW-{w.pw}</span>
+            <span className="witness-name">{w.name}</span>
+            <span className="case-link-meta num"><ParaLinks caseId={caseId} paras={w.paras} inPage /></span>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 
