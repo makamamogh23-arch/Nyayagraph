@@ -35,6 +35,7 @@ class Scope:
     drop_words: set[str] = field(default_factory=set)
     paras: dict[str, str] = field(default_factory=dict)  # paragraph pid -> reason, boosted
     notes: list[str] = field(default_factory=list)       # for the prompt
+    case_facts: dict[str, list[str]] = field(default_factory=dict)  # case_id -> scope facts shown with its sources
 
     def restrict(self, cases: set[str]) -> None:
         self.case_ids = set(cases) if self.case_ids is None else self.case_ids & set(cases)
@@ -114,8 +115,11 @@ def analyse(q: str, session, lawyer_keys: set[str], named: list[str]) -> Scope:
         if cases:
             s.restrict(set(cases))
             s.drop_words |= court_phrase_words(q)
+            for c in cases:
+                s.case_facts.setdefault(c, []).append(f"appeal from the {court}")
             s.filters.append({"kind": "court", "label": court, "detail": "appeals from", "cases": len(cases)})
-            s.notes.append(f"only judgments in appeals from the {court} ({len(cases)} in the corpus)")
+            s.notes.append(f"the search was restricted to judgments in appeals from the {court} ({len(cases)} in "
+                           "the corpus); every judgment below except cited precedents is one of them")
     for key in detect_lawyers(q, lawyer_keys):
         rows = list(session.run("""MATCH (l:Lawyer {key: $k})-[e:APPEARED_IN]->(c:Case)
                                    RETURN l.name AS name, c.case_id AS c, e.side AS side, e.senior AS senior""", k=key))
@@ -127,9 +131,13 @@ def analyse(q: str, session, lawyer_keys: set[str], named: list[str]) -> Scope:
             side_text = ", ".join(f"{n} for the {sd}" for sd, n in sorted(sides.items(), key=lambda x: -x[1]))
             s.restrict({r["c"] for r in rows})
             s.drop_words |= set(key.split()) | LAWYER_WORDS
+            for r in rows:
+                senior = ", senior advocate" if r["senior"] else ""
+                s.case_facts.setdefault(r["c"], []).append(f"counsel: {name}, for the {r['side']}{senior}")
             s.filters.append({"kind": "lawyer", "label": name, "detail": "counsel in", "cases": len(rows)})
-            s.notes.append(f"only judgments in which {name} appeared as counsel ({len(rows)} judgments: {side_text}); "
-                           "the appearance lists are not among the paragraphs, so state this scope rather than cite it")
+            s.notes.append(f"the search was restricted to the {len(rows)} judgments in which {name} appeared as "
+                           f"counsel ({side_text}); every judgment below except cited precedents is one of them, and "
+                           "each source title names the side he or she appeared for")
     pws = detect_pws(q)
     if pws and named:
         case = named[0]

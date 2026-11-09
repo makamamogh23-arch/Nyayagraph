@@ -414,7 +414,8 @@ class Retriever:
             prec.append(h)
             have.add(dst)
         return {"question": q, "provisions": prov, "provision_map": prov_map, "related_map": related,
-                "named_cases": named, "scope": scope.filters, "scope_notes": scope.notes, "hits": hits,
+                "named_cases": named, "scope": scope.filters, "scope_notes": scope.notes,
+                "scope_facts": scope.case_facts, "hits": hits,
                 "precedents": prec}
 
 

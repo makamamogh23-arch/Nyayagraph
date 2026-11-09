@@ -34,14 +34,21 @@ passage the Court quotes in order to reject it. Say which when it matters.
 counterpart of a provision when the correspondence note under the question or the paragraphs supply it, and say \
 it comes from the comparison table; otherwise do not guess section numbers. Most judgments here predate the new \
 Acts and apply the old sections.
+- Search scope: when a scope note follows the question, the system has already restricted the results to the \
+judgments matching it (lower court or counsel from each judgment's headnote, or a witness from its text), and each \
+source title carries that fact. Treat the scope as established: say once in a short clause that it comes from the case \
+graph, then answer from the paragraphs. Do not ask for appearance lists or say the paragraphs fail to show who \
+appeared; the paragraphs supply the law and facts, the scope supplies which judgments they come from.
 - Write for a lawyer: lead with the direct answer, then the supporting authorities. Plain prose, short paragraphs; \
 no headings for short answers."""
 
 
-def search_result(h: Hit) -> dict:
+def search_result(h: Hit, facts: dict | None = None) -> dict:
     title = f"{h.title} ({h.year})" if h.year else h.title
     if h.cited_from:
         title += f" — precedent cited at {h.cited_from}"
+    elif facts and facts.get(h.case_id):
+        title += " — " + "; ".join(facts[h.case_id])
     return {"type": "search_result", "source": h.label, "title": title or h.label,
             "content": [{"type": "text", "text": h.text}], "citations": {"enabled": True}}
 
@@ -97,7 +104,7 @@ def build_request(question: str, retriever: Retriever, model: str = MODEL, effor
     hits = r["hits"] + r["precedents"]
     if not hits:
         return {"search": r, "hits": hits, "params": None}
-    content = [search_result(h) for h in hits]
+    content = [search_result(h, r.get("scope_facts")) for h in hits]
     note = ""
     if r["provision_map"]:
         note = ("\n\nOld/new correspondence for provisions named in the question (from the official comparison "
@@ -108,7 +115,7 @@ def build_request(question: str, retriever: Retriever, model: str = MODEL, effor
         note += ("\n\nSections defining the offences in those provisions, with their BNS counterparts (same tables): "
                  + "; ".join(r["related_map"]))
     if r.get("scope_notes"):
-        note += "\n\nSearch scope, from the case graph: " + "; ".join(r["scope_notes"]) + "."
+        note += "\n\nSearch scope (applied by the system, from the case graph): " + "; ".join(r["scope_notes"]) + "."
     content.append({"type": "text", "text": question + note})
     params = dict(model=model, max_tokens=8000, system=SYSTEM, thinking={"type": "adaptive"},
                   output_config={"effort": effort}, messages=[{"role": "user", "content": content}])
