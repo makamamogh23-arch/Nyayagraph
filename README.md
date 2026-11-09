@@ -10,6 +10,8 @@ fuzzy + LLM entity linking, stored in Neo4j and searched with GraphRAG. It also 
 reform: a question about BNSS s.528 finds the case law on CrPC s.482, and the answer shows the correspondence it
 used.
 
+![Nyayagraph answering "Can the High Court quash an FIR under Section 528 BNSS when the parties have settled?": the CrPC s.482 = BNSS s.528 correspondence, a cited answer, and the cited paragraph open in the source panel](docs/screenshot.webp)
+
 ## Results
 
 | component | measured on | result |
