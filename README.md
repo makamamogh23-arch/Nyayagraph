@@ -138,3 +138,14 @@ python -m eval.answer_checks
   people ("Reliance"); spot checks are in the commit history and `results/`.
 - **Answers depend on retrieval.** When the paragraph that states a rule is not retrieved, the answer can only
   say what the retrieved paragraphs say.
+
+## License
+
+Code: [MIT](LICENSE). Data is not included and keeps its own terms:
+
+- Judgments: the public `indian-supreme-court-judgments` dataset on AWS Open Data (see its listing for terms).
+- NER training data: InLegalNER, under the terms of its Hugging Face dataset card.
+- Section correspondence tables in `data/ref/`: derived from the published IPC/CrPC/Evidence Act comparison
+  tables (CAPT Bhopal) and, for IPC to BNS gaps, the Apache-2.0 `nandhakumarg/IPC_and_BNS_transformation` dataset.
+
+Nyayagraph is a research tool, not legal advice. Answers can be wrong or incomplete; check every cited paragraph.
