@@ -107,6 +107,8 @@ def build_request(question: str, retriever: Retriever, model: str = MODEL, effor
     if r.get("related_map"):
         note += ("\n\nSections defining the offences in those provisions, with their BNS counterparts (same tables): "
                  + "; ".join(r["related_map"]))
+    if r.get("scope_notes"):
+        note += "\n\nSearch scope, from the case graph: " + "; ".join(r["scope_notes"]) + "."
     content.append({"type": "text", "text": question + note})
     params = dict(model=model, max_tokens=8000, system=SYSTEM, thinking={"type": "adaptive"},
                   output_config={"effort": effort}, messages=[{"role": "user", "content": content}])
@@ -142,7 +144,7 @@ def ask(question: str, retriever: Retriever, model: str = MODEL, effort: str = "
               for b in msg.content if b.type == "text"]
     rec = {"question": question, "model": model, "answer": answer, "sources": sources, "blocks": blocks,
            "retrieved": [h.label for h in hits], "provisions": r["provisions"], "provision_map": r["provision_map"], "named_cases": r["named_cases"],
-           "stop_reason": msg.stop_reason, "usage": {"in": u.input_tokens, "out": u.output_tokens},
+           "scope": r.get("scope", []), "stop_reason": msg.stop_reason, "usage": {"in": u.input_tokens, "out": u.output_tokens},
            "cost_usd": round(cost, 5), "seconds": {"retrieve": round(t_retrieve, 1), "total": round(time.time() - t0, 1)}}
     log_answer(rec)
     return rec

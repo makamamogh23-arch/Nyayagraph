@@ -12,6 +12,7 @@ from link.acts import YEAR_TYPOS, merge_variants, normalize, strip_prefix
 from link.citations import extract as cites
 from ner.corpus_entities import clean_person, normalize_court, person_key, pw_number, side_of
 from ner.corpus_inputs import pieces
+from rag.scope import detect_courts, detect_lawyers, detect_pws, neutral_citations
 from link.law_map import CHECKS
 from link.provisions import IPC_ONLY, extract, fix_ipc_ocr
 from link.resolve import name_before, parties
@@ -251,3 +252,28 @@ def test_pieces_cover_text_in_order():
 def test_pw_number(text, name, pw):
     s = text.index(name)
     assert pw_number(text, s, s + len(name), name) == pw
+
+
+@pytest.mark.parametrize("q, courts", [
+    ("In appeals from the Allahabad High Court, when was a dying declaration rejected?",
+     ["High Court of Judicature at Allahabad"]),
+    ("What has the High Court of Judicature at Allahabad held?", ["High Court of Judicature at Allahabad"]),
+    ("Madhya Pradesh High Court bail orders", ["High Court of Madhya Pradesh"]),
+    ("Can the High Court quash an FIR under Section 482 CrPC?", []),
+    ("Can the High Court quash an FIR registered in Jharkhand?", []),   # place not next to "High Court"
+])
+def test_detect_courts(q, courts):
+    assert detect_courts(q) == courts
+
+
+def test_detect_lawyers():
+    keys = {"sidharth luthra", "k k venugopal", "high court", "cr p c"}   # the last two: junk keys in NER output
+    assert detect_lawyers("In cases argued by Sidharth Luthra, how was delay treated?", keys) == ["sidharth luthra"]
+    assert detect_lawyers("Cases where K.K. Venugopal appeared", keys) == ["k k venugopal"]
+    assert detect_lawyers("Sidharth Luthra on delay in FIR", keys) == []            # no cue word
+    assert detect_lawyers("Can counsel ask the High Court under Cr.P.C. for bail?", keys) == []
+
+
+def test_detect_witness_and_citation():
+    assert detect_pws("What did PW-3 and P.W. 11 say in 2025 INSC 529?") == [3, 11]
+    assert neutral_citations("What did PW-3 say in 2025 INSC 529?") == ["2025 INSC 529"]

@@ -53,6 +53,7 @@ flowchart LR
 | NER | InLegalBERT baseline and Qwen2.5-7B QLoRA (r8, r16) trained on InLegalNER on Kaggle T4s; vLLM inference over our own judgments. Predicted strings are aligned back to the source text, so nothing the model invents reaches the graph. | `ner/` |
 | graph | Parquet tables, then an idempotent batched load into Neo4j; PageRank and Louvain on the citation graph (GDS). | `graph/` |
 | retrieval | BM25 over ~200-word chunks; the graph re-ranks paragraphs that invoke the old-Act counterpart of a new-Act section in the question, or cite a case the question names; cited precedents are pulled in through `CITES`. | `rag/retrieve.py` |
+| scope | A High Court, lawyer or witness named in the question narrows the search to the judgments the graph links to it: "appeals from the Allahabad High Court" (247 judgments), "cases argued by Sidharth Luthra" (63), "what did PW-3 say in 2025 INSC 529" (that judgment, with the witness's paragraphs boosted). Detection is strict; none of the 600 benchmark questions trigger it. | `rag/scope.py` |
 | answer | Claude Opus 5.5 with each paragraph as a `search_result` block, so citations are native and point at `case_id ¶para`. Every answer is logged with its sources and usage. | `rag/ask.py` |
 | web | FastAPI streams the answer (server-sent events); React shows it with numbered citations, a source panel, and full case pages. | `api/`, `web/` |
 

@@ -8,6 +8,8 @@
      that invoke it anywhere, and a small PageRank prior; at most PER_CASE paragraphs per case.
   4. Precedent expansion: corpus cases CITED from the top paragraphs (CITES.paras holds the citing paragraph);
      each contributes its paragraph most similar to the question.
+  5. Scope (rag/scope.py): a lower court, lawyer or witness named in the question restricts the search to the
+     judgments the graph links to it; a witness's own paragraphs are boosted. No precedent expansion when scoped.
 
 Usage: python -m rag.retrieve "question"
 """
@@ -21,6 +23,7 @@ import numpy as np
 import pandas as pd
 
 from graph.conn import driver
+from rag import scope as scoping
 
 RAG = "data/rag"
 K_TEXT, RRF_K = 100, 60
@@ -31,6 +34,7 @@ PER_CASE, TOP_PARAS, TOP_PRECEDENTS, MAX_WORDS = 3, 12, 4, 350
 # *counterparts* of new-Act provisions the question names (BNSS 528 -> paragraphs invoking CrPC 482); BM25 already
 # matches a literally named section. A PageRank prior showed no gain and is off.
 W_PARA_PROV, W_CASE_PROV, W_PAGERANK, W_NAMED_CASE = 0.020, 0.008, 0.0, 0.030
+W_WITNESS = 0.050  # paragraphs naming the witness a question asks about (rag/scope.py)
 OLD_ACTS = {"Indian Penal Code, 1860", "Code of Criminal Procedure, 1973", "Indian Evidence Act, 1872"}
 IPC, BNS = "Indian Penal Code, 1860", "Bharatiya Nyaya Sanhita, 2023"
 
@@ -193,17 +197,26 @@ class Retriever:
         t = t[t["title"].str.contains(r"\sv(?:s)?\.?\s|versus", case=False, regex=True)]
         return dict(zip(t["case_id"], t["title"]))
 
+    @cached_property
+    def lawyer_keys(self) -> set[str]:
+        try:
+            return set(pd.read_parquet("data/graph/nodes_lawyer.parquet")["key"])
+        except FileNotFoundError:  # graph built without the NER pass
+            return set()
+
     def named_cases(self, q: str) -> list[str]:
-        """Cases the question names ('... in Sharad Birdhichand Sarda v. State of Maharashtra ...'), corpus or
-        external, best match first. Matches the 'X v. Y' span of the question against every case title."""
+        """Cases the question names ('... in Sharad Birdhichand Sarda v. State of Maharashtra ...' or by neutral
+        citation '2025 INSC 529'), corpus or external, best match first. Matches the 'X v. Y' span of the question
+        against every case title."""
+        cited = [c for c in scoping.neutral_citations(q) if c in self.titles]
         m = re.search(r"((?:[A-Z][\w.@&'-]*\s+){1,6}(?:v\.?|vs\.?|versus)\s+(?:(?:the|of|and)\s+|[A-Z][\w.()&'-]*\s*){1,8})", q)
         if not m:
-            return []
+            return cited
         from rapidfuzz import fuzz, process
         span = m.group(1).strip(" ,.")
         hits = process.extract(span, self.all_titles, scorer=fuzz.token_set_ratio, limit=5, score_cutoff=88)
         top = hits[0][1] if hits else 0
-        return [cid for _, sc, cid in hits if sc >= top - 3]
+        return cited + [cid for _, sc, cid in hits if sc >= top - 3 and cid not in cited]
 
     def citing_paragraphs(self, case_ids: list[str]) -> dict[str, str]:
         """paragraph pid -> cited case id, for corpus paragraphs that cite any of the given cases."""
@@ -220,15 +233,21 @@ class Retriever:
         return out
 
     # --- text search --------------------------------------------------------------------------------------------
-    def text_search(self, q: str, qv: np.ndarray, use_bm25: bool = True, use_dense: bool = True) -> pd.Series:
-        """chunk row -> fused RRF score (BM25 and / or dense)."""
+    def text_search(self, q: str, qv: np.ndarray, use_bm25: bool = True, use_dense: bool = True,
+                    cases: set[str] | None = None) -> pd.Series:
+        """chunk row -> fused RRF score (BM25 and / or dense), over the chunks of `cases` only when given."""
         scores: dict[int, float] = {}
+        mask = self.chunks["case_id"].isin(cases).to_numpy() if cases is not None else None
         if use_bm25:
-            res, _ = self.bm25.retrieve([tokens(q)], k=K_TEXT, show_progress=False)
-            for rank, i in enumerate(res[0]):
-                scores[int(i)] = scores.get(int(i), 0) + 1 / (RRF_K + rank)
+            res, sc = self.bm25.retrieve([tokens(q)], k=K_TEXT, show_progress=False,
+                                         weight_mask=None if mask is None else mask.astype(np.float32))
+            for rank, (i, v) in enumerate(zip(res[0], sc[0])):
+                if mask is None or (mask[int(i)] and v > 0):
+                    scores[int(i)] = scores.get(int(i), 0) + 1 / (RRF_K + rank)
         if use_dense:
             dense = self.emb @ qv
+            if mask is not None:
+                dense = np.where(mask, dense, -np.inf)
             top = np.argpartition(-dense, K_TEXT)[:K_TEXT]
             for rank, i in enumerate(top[np.argsort(-dense[top])]):
                 scores[int(i)] = scores.get(int(i), 0) + W_DENSE / (RRF_K + rank)
@@ -297,8 +316,15 @@ class Retriever:
         bridge = [p for p in prov if p not in named_prov and p.split("|")[0] in OLD_ACTS]
         prov_paras, prov_cases = self.provision_hits(bridge)
         named = self.named_cases(q) if use_graph else []
+        scope = scoping.Scope()
+        if use_graph:
+            with self.driver.session() as s:
+                scope = scoping.analyse(q, s, self.lawyer_keys, [c for c in named if c in self.titles])
+        allowed = scope.case_ids
+        if allowed is not None and len(allowed) == 1:
+            per_case = top  # a question about one judgment reads as much of it as it needs
 
-        fused = self.text_search(q, qv, use_bm25, use_dense)
+        fused = self.text_search(q, qv, use_bm25, use_dense, allowed)
         rows = self.chunks.loc[fused.index, ["pid", "case_id"]].assign(score=fused.values, row=fused.index)
         # named cases: their own best chunks (corpus cases), and the paragraphs that cite them (corpus or external:
         # an old precedent outside the corpus is known through how later judgments discuss it)
@@ -311,6 +337,12 @@ class Retriever:
                 extra_rows += list(idx[np.argsort(-(self.emb[idx] @ qv))[:3]])
         for pid in citing:
             extra_rows += list(pid_rows.get(pid, []))
+        if scope.paras:
+            pid_rows = pid_rows or self.chunks.groupby("pid").indices
+            for pid in scope.paras:
+                extra_rows += list(pid_rows.get(pid, []))
+        if allowed is not None:
+            extra_rows = [i for i in extra_rows if self.chunks.at[int(i), "case_id"] in allowed]
         if extra_rows:
             extra_rows = np.array(sorted(set(extra_rows) - set(rows["row"])), dtype=int)
             sims = self.emb[extra_rows] @ qv  # rank the added chunks among themselves by similarity, RRF-style
@@ -336,6 +368,9 @@ class Retriever:
             elif r["pid"] in citing:
                 bonus += W_NAMED_CASE
                 why[r["pid"]].append("cites named case")
+            if r["pid"] in scope.paras:
+                bonus += W_WITNESS
+                why[r["pid"]].append(f"names {scope.paras[r['pid']]}")
             if use_graph:
                 bonus += W_PAGERANK * math.log1p(self.pagerank.get(r["case_id"], 0.0))
             para.at[i, "score"] = r["score"] + bonus
@@ -360,7 +395,7 @@ class Retriever:
 
         # precedents cited from the retrieved paragraphs, best paragraph of each by similarity to the question
         prec, have = [], {h.case_id for h in hits}
-        for dst, src in (self.cited_from(hits) if precedents and use_graph else []):
+        for dst, src in (self.cited_from(hits) if precedents and use_graph and allowed is None else []):
             if len(prec) >= precedents or dst in have:
                 continue
             idx = self.chunk_rows.get(dst)
@@ -375,14 +410,14 @@ class Retriever:
             prec.append(h)
             have.add(dst)
         return {"question": q, "provisions": prov, "provision_map": prov_map, "related_map": related,
-                "named_cases": named, "hits": hits,
+                "named_cases": named, "scope": scope.filters, "scope_notes": scope.notes, "hits": hits,
                 "precedents": prec}
 
 
 def main():
     q = " ".join(sys.argv[1:]) or "When can conviction rest solely on circumstantial evidence?"
     r = Retriever().search(q)
-    print("provisions:", r["provisions"], "| named cases:", r["named_cases"])
+    print("provisions:", r["provisions"], "| named cases:", r["named_cases"], "| scope:", r["scope"])
     for h in r["hits"] + r["precedents"]:
         tag = f"cited from {h.cited_from}" if h.cited_from else ", ".join(h.why)
         print(f"{h.score:.4f}  {h.label:28}  {h.title[:50]:50}  [{tag}]")

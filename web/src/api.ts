@@ -34,11 +34,20 @@ export interface NamedCase {
   title: string | null
 }
 
+/** A filter from the case graph: lower court, counsel or witness named in the question. */
+export interface ScopeFilter {
+  kind: 'court' | 'lawyer' | 'witness'
+  label: string
+  detail: string
+  cases: number
+}
+
 export interface Context {
   provisions: string[]
   provision_map: string[]
   related_map?: string[]
   named_cases: NamedCase[]
+  scope?: ScopeFilter[]
   sources: Source[]
   seconds: number
 }

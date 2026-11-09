@@ -118,3 +118,22 @@ python -m rag.smoke                      # retrieval only
 python -m rag.ask "question"             # Opus 5.5; --model claude-sonnet-5-5 or claude-haiku-5-5
 python -m rag.ask --show-context "..."   # also print the retrieved paragraphs
 ```
+
+## Scope from NER entities (`rag/scope.py`)
+
+Lower courts, lawyers and witnesses from the fine-tuned NER pass narrow retrieval when a question names them:
+
+| question | scope | effect |
+|---|---|---|
+| In appeals from the Allahabad High Court, when did the Supreme Court set aside a conviction based on a dying declaration? | 247 judgments (APPEAL_FROM) | BM25 restricted with a weight mask; all 12 paragraphs from Allahabad appeals |
+| In cases argued by Sidharth Luthra, how did the Court treat delay in lodging the FIR? | 63 judgments (APPEARED_IN) | the answer (Haiku) says only three paragraphs touch the issue rather than generalising |
+| What did PW-3 say in 2025 INSC 529? | 1 judgment; WITNESS_IN paragraphs +0.05 | ¶7, the paragraph assessing PW-3, ranks first; per-case cap lifted |
+
+Detection is strict because a wrong filter hides the right judgments: a place must touch "High Court", a lawyer
+needs an exact full-name match plus a cue word ("argued", "appeared", "counsel"), and a witness needs a PW number
+plus a named case. Two false positives found on the benchmark and fixed: "Cr.P.C." and "High Court" matched junk
+lawyer keys from the NER output. Precedent expansion is off for scoped questions.
+
+Benchmark re-run (test): question style MRR 0.640 and newact 0.597, unchanged; no question-style query triggers a
+scope. In the `held` style (editor text, not user questions) 6 of 600 strings name a specific High Court, and one
+test item loses its gold case (case@10 1.000 to 0.996).

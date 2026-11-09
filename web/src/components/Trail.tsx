@@ -26,7 +26,7 @@ export function Progress({ stage }: { stage: Stage }) {
   )
 }
 
-/** What the system did before answering: provisions and their old/new counterparts, named cases, how much it read. */
+/** What the system did before answering: provisions and their old/new counterparts, named cases, scope, how much it read. */
 export function Trail({ context, passages }: { context: Context; passages: number | null }) {
   const corr = context.provision_map.map(parseCorrespondence).filter(Boolean) as { old: string; next: string }[]
   const mapped = corr.flatMap((c) => [c.old, c.next])
@@ -79,12 +79,26 @@ export function Trail({ context, passages }: { context: Context; passages: numbe
           </dd>
         </div>
       )}
+      {(context.scope?.length ?? 0) > 0 && (
+        <div className="trail-row">
+          <dt>Limited to</dt>
+          <dd className="trail-chips">
+            {context.scope!.map((f) => (
+              <span key={f.kind + f.label} className="chip" title="From the case graph (automated extraction of the judgments' headnotes and text)">
+                <span className="chip-note">{f.kind === 'witness' ? `${f.detail}: ` : `${f.detail} `}</span>
+                {f.label}
+                {f.kind !== 'witness' && <span className="chip-note"> · {nf.format(f.cases)} {f.cases === 1 ? 'judgment' : 'judgments'}</span>}
+              </span>
+            ))}
+          </dd>
+        </div>
+      )}
       <div className="trail-row">
         <dt>Read</dt>
         <dd className="num">
           {context.sources.length} paragraphs from {judgments} {judgments === 1 ? 'judgment' : 'judgments'}
           {precedents > 0 && <>, including {precedents} from cited precedents</>}
-          {passages ? <span className="trail-muted"> · searched {nf.format(passages)} paragraphs</span> : null}
+          {passages && !context.scope?.length ? <span className="trail-muted"> · searched {nf.format(passages)} paragraphs</span> : null}
         </dd>
       </div>
     </dl>

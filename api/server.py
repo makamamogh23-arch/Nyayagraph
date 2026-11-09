@@ -3,7 +3,7 @@
   GET  /api/meta                 corpus coverage + example questions
   POST /api/ask                  {question, mode: "full" | "quick"} -> text/event-stream:
                                    stage   {step}                          analysing | retrieving | answering
-                                   context {provisions, provision_map, named_cases, sources}
+                                   context {provisions, provision_map, named_cases, scope, sources}
                                    text    {block, text}                   answer text, by content block
                                    cite    {block, source, cited_text}     a citation on that block
                                    done    {model, usage, cost_usd, seconds, stop_reason}
@@ -217,7 +217,7 @@ def ask_stream(question: str, mode: str):
              for cid in search["named_cases"]]
     yield sse("context", {"provisions": [p.replace("|", " s.") for p in search["provisions"]],
                           "provision_map": search["provision_map"], "related_map": search.get("related_map", []),
-                          "named_cases": named,
+                          "named_cases": named, "scope": search.get("scope", []),
                           "sources": [source_json(i, h) for i, h in enumerate(hits)],
                           "seconds": round(time.time() - t0, 1)})
     if req["params"] is None:
@@ -269,7 +269,7 @@ def ask_stream(question: str, mode: str):
                             for i in cited],
                 "retrieved": [h.label for h in hits], "provisions": search["provisions"],
                 "provision_map": search["provision_map"], "named_cases": search["named_cases"],
-                "stop_reason": msg.stop_reason, "usage": {"in": u.input_tokens, "out": u.output_tokens},
+                "scope": search.get("scope", []), "stop_reason": msg.stop_reason, "usage": {"in": u.input_tokens, "out": u.output_tokens},
                 "cost_usd": round(cost, 5), "seconds": {"total": seconds}})
 
 
