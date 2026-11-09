@@ -234,12 +234,14 @@ class Retriever:
 
     # --- text search --------------------------------------------------------------------------------------------
     def text_search(self, q: str, qv: np.ndarray, use_bm25: bool = True, use_dense: bool = True,
-                    cases: set[str] | None = None) -> pd.Series:
-        """chunk row -> fused RRF score (BM25 and / or dense), over the chunks of `cases` only when given."""
+                    cases: set[str] | None = None, drop: set[str] = frozenset()) -> pd.Series:
+        """chunk row -> fused RRF score (BM25 and / or dense), over the chunks of `cases` only when given; `drop`
+        removes words from the BM25 query (scope words, rag/scope.py)."""
         scores: dict[int, float] = {}
         mask = self.chunks["case_id"].isin(cases).to_numpy() if cases is not None else None
         if use_bm25:
-            res, sc = self.bm25.retrieve([tokens(q)], k=K_TEXT, show_progress=False,
+            q_tokens = [t for t in tokens(q) if t not in drop] or tokens(q)
+            res, sc = self.bm25.retrieve([q_tokens], k=K_TEXT, show_progress=False,
                                          weight_mask=None if mask is None else mask.astype(np.float32))
             for rank, (i, v) in enumerate(zip(res[0], sc[0])):
                 if mask is None or (mask[int(i)] and v > 0):
@@ -305,9 +307,11 @@ class Retriever:
                    text=text, score=score, why=why)
 
     def search(self, q: str, top: int = TOP_PARAS, precedents: int = TOP_PRECEDENTS, per_case: int = PER_CASE,
-               use_bm25: bool = True, use_dense: bool = False, use_graph: bool = True, rerank: bool = False) -> dict:
-        """use_bm25 / use_dense / use_graph switch components off for ablations (eval/rag_bench.py); rerank orders
-        the top RERANK_DEPTH paragraphs with a cross-encoder before the per-case cap."""
+               use_bm25: bool = True, use_dense: bool = False, use_graph: bool = True, rerank: bool = False,
+               use_scope: bool = True) -> dict:
+        """use_bm25 / use_dense / use_graph / use_scope switch components off for ablations (eval/rag_bench.py,
+        eval/scope_bench.py); rerank orders the top RERANK_DEPTH paragraphs with a cross-encoder before the per-case
+        cap."""
         qv = self.embed_query(q)
         prov, prov_map, related = self.provisions(q) if use_graph else ([], [], [])
         named_prov = set(self.provisions_named(q)) if use_graph else set()
@@ -317,14 +321,14 @@ class Retriever:
         prov_paras, prov_cases = self.provision_hits(bridge)
         named = self.named_cases(q) if use_graph else []
         scope = scoping.Scope()
-        if use_graph:
+        if use_graph and use_scope:
             with self.driver.session() as s:
                 scope = scoping.analyse(q, s, self.lawyer_keys, [c for c in named if c in self.titles])
         allowed = scope.case_ids
         if allowed is not None and len(allowed) == 1:
             per_case = top  # a question about one judgment reads as much of it as it needs
 
-        fused = self.text_search(q, qv, use_bm25, use_dense, allowed)
+        fused = self.text_search(q, qv, use_bm25, use_dense, allowed, scope.drop_words if allowed is not None else set())
         rows = self.chunks.loc[fused.index, ["pid", "case_id"]].assign(score=fused.values, row=fused.index)
         # named cases: their own best chunks (corpus cases), and the paragraphs that cite them (corpus or external:
         # an old precedent outside the corpus is known through how later judgments discuss it)

@@ -137,3 +137,8 @@ lawyer keys from the NER output. Precedent expansion is off for scoped questions
 Benchmark re-run (test): question style MRR 0.640 and newact 0.597, unchanged; no question-style query triggers a
 scope. In the `held` style (editor text, not user questions) 6 of 600 strings name a specific High Court, and one
 test item loses its gold case (case@10 1.000 to 0.996).
+
+Measured since on 10 questions with graph-defined gold (`results/scope_bench.md`): gold paragraphs in the top 10
+rise from 0.20 to 0.93. Reaching that needed a second change: the scope's own words ("appeals from the Bombay High
+Court", the lawyer's name) are dropped from the BM25 query once the search is restricted, since otherwise they match
+every in-scope judgment's opening paragraph.

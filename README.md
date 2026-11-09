@@ -19,6 +19,7 @@ used.
 | NER, Qwen2.5-7B QLoRA r16 | InLegalNER test, 13,365 entities | strict F1 **0.879** (InLegalBERT 0.856, zero-shot Qwen 0.334); +0.023 over the encoder, 95% CI [+0.015, +0.030] |
 | Precedent linking, fuzzy + Claude Haiku | 600 hidden "(supra)" citations | precision 0.980, recall 0.913 (fuzzy alone 0.998 / 0.848) |
 | Retrieval, BM25 + graph bridge | 279 test questions from SCR headnotes | MRR 0.640, gold paragraph in top 10: 0.817; +0.118 MRR over the first setup |
+| Scope by lower court / counsel | 10 questions, gold from the graph | gold paragraphs in top 10: 0.20 without scope, 0.93 with; first result gold in 10 of 10 ([`results/scope_bench.md`](results/scope_bench.md)) |
 | Answers, Claude Opus 5.5 | 10 logged answers, deterministic checks | 120 of 131 cited passages are word-for-word text of the cited paragraph, 0 misattributed; 5 of 5 quotations exact |
 
 Details, ablations and caveats: [`results/`](results/). Two findings worth noting:
@@ -55,7 +56,7 @@ flowchart LR
 | NER | InLegalBERT baseline and Qwen2.5-7B QLoRA (r8, r16) trained on InLegalNER on Kaggle T4s; vLLM inference over our own judgments. Predicted strings are aligned back to the source text, so nothing the model invents reaches the graph. | `ner/` |
 | graph | Parquet tables, then an idempotent batched load into Neo4j; PageRank and Louvain on the citation graph (GDS). | `graph/` |
 | retrieval | BM25 over ~200-word chunks; the graph re-ranks paragraphs that invoke the old-Act counterpart of a new-Act section in the question, or cite a case the question names; cited precedents are pulled in through `CITES`. | `rag/retrieve.py` |
-| scope | A High Court, lawyer or witness named in the question narrows the search to the judgments the graph links to it: "appeals from the Allahabad High Court" (247 judgments), "cases argued by Sidharth Luthra" (63), "what did PW-3 say in 2025 INSC 529" (that judgment, with the witness's paragraphs boosted). Detection is strict; none of the 600 benchmark questions trigger it. | `rag/scope.py` |
+| scope | A High Court, lawyer or witness named in the question narrows the search to the judgments the graph links to it: "appeals from the Allahabad High Court" (247 judgments), "cases argued by Sidharth Luthra" (63), "what did PW-3 say in 2025 INSC 529" (that judgment, with the witness's paragraphs boosted). Once restricted, the words that only name the scope are dropped from the BM25 query. Detection is strict; none of the 600 benchmark questions trigger it. | `rag/scope.py` |
 | answer | Claude Opus 5.5 with each paragraph as a `search_result` block, so citations are native and point at `case_id ¶para`. Every answer is logged with its sources and usage. | `rag/ask.py` |
 | web | FastAPI streams the answer (server-sent events); React shows it with numbered citations, a source panel, and full case pages. | `api/`, `web/` |
 
@@ -123,6 +124,7 @@ Evaluate:
 python -m pytest tests
 python -m eval.ner_f1 data/instruct/test.jsonl data/preds/preds_r16.jsonl
 python -m eval.rag_bench
+python -m eval.scope_bench
 python -m eval.answer_checks
 ```
 

@@ -7,8 +7,10 @@
 
 Detection is deliberately strict (a city next to "High Court", an exact lawyer-name match plus a cue word, a PW
 number plus a named case): a wrong filter hides the right judgments, a missed one only leaves the search unscoped.
-Several filters intersect. The entities come from the fine-tuned NER pass (ner/corpus_entities.py), so the prompt
-says the scope rests on automated extraction.
+Several filters intersect. Once the search is restricted, the words that only name the scope are dropped from the
+BM25 query (drop_words): inside "appeals from the Bombay High Court" they match nearly every judgment's opening
+paragraph (eval/scope_bench.py: gold@10 0.60 with them, 0.93 without). The entities come from the fine-tuned NER
+pass (ner/corpus_entities.py), so the prompt says the scope rests on automated extraction.
 """
 import re
 from dataclasses import dataclass, field
@@ -28,6 +30,9 @@ NOT_NAME = {"high", "court", "state", "union", "india", "government", "police", 
 class Scope:
     filters: list[dict] = field(default_factory=list)   # {kind, label, detail, cases}
     case_ids: set[str] | None = None                     # None = whole corpus
+    # words that only name the scope ("appeals from the Bombay High Court", "argued by Sidharth Luthra"): once the
+    # search is restricted they match nearly every in-scope judgment's opening paragraph, so text search drops them
+    drop_words: set[str] = field(default_factory=set)
     paras: dict[str, str] = field(default_factory=dict)  # paragraph pid -> reason, boosted
     notes: list[str] = field(default_factory=list)       # for the prompt
 
@@ -40,6 +45,19 @@ class Scope:
 COURT_BEFORE = re.compile(r"((?:[a-z.&]+\s+){1,3})high\s+court\b")
 COURT_AFTER = re.compile(r"\bhigh\s+court\s+((?:of\s+judicature\s+)?(?:of|at|for)\s+(?:the\s+state\s+of\s+)?"
                          r"[a-z.&]+(?:\s+(?:and\s+)?[a-z.&]+){0,2})")
+
+
+COURT_WORDS = {"appeal", "appeals", "appealed", "from", "high", "court", "courts", "judicature"}
+LAWYER_WORDS = {"argued", "appeared", "appearing", "appears", "represented", "representing", "counsel", "advocate",
+                "advocates", "lawyer", "lawyers", "senior", "cases", "case", "where", "which"}
+
+
+def court_phrase_words(q: str) -> set[str]:
+    """The words of the "<place> High Court" / "High Court of <place>" phrases in the question."""
+    low = " ".join(q.lower().split())
+    words = [w for m in COURT_BEFORE.finditer(low) for w in m.group(1).split()]
+    words += [w for m in COURT_AFTER.finditer(low) for w in m.group(1).split()]
+    return {w.strip(".&") for w in words} | COURT_WORDS
 
 
 def detect_courts(q: str) -> list[str]:
@@ -95,6 +113,7 @@ def analyse(q: str, session, lawyer_keys: set[str], named: list[str]) -> Scope:
                                              n=court)]
         if cases:
             s.restrict(set(cases))
+            s.drop_words |= court_phrase_words(q)
             s.filters.append({"kind": "court", "label": court, "detail": "appeals from", "cases": len(cases)})
             s.notes.append(f"only judgments in appeals from the {court} ({len(cases)} in the corpus)")
     for key in detect_lawyers(q, lawyer_keys):
@@ -107,6 +126,7 @@ def analyse(q: str, session, lawyer_keys: set[str], named: list[str]) -> Scope:
                 sides[r["side"]] = sides.get(r["side"], 0) + 1
             side_text = ", ".join(f"{n} for the {sd}" for sd, n in sorted(sides.items(), key=lambda x: -x[1]))
             s.restrict({r["c"] for r in rows})
+            s.drop_words |= set(key.split()) | LAWYER_WORDS
             s.filters.append({"kind": "lawyer", "label": name, "detail": "counsel in", "cases": len(rows)})
             s.notes.append(f"only judgments in which {name} appeared as counsel ({len(rows)} judgments: {side_text}); "
                            "the appearance lists are not among the paragraphs, so state this scope rather than cite it")

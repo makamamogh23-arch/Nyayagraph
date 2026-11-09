@@ -12,7 +12,7 @@ from link.acts import YEAR_TYPOS, merge_variants, normalize, strip_prefix
 from link.citations import extract as cites
 from ner.corpus_entities import clean_person, normalize_court, person_key, pw_number, side_of
 from ner.corpus_inputs import pieces
-from rag.scope import detect_courts, detect_lawyers, detect_pws, neutral_citations
+from rag.scope import court_phrase_words, detect_courts, detect_lawyers, detect_pws, neutral_citations
 from link.law_map import CHECKS
 from link.provisions import IPC_ONLY, extract, fix_ipc_ocr
 from link.resolve import name_before, parties
@@ -277,3 +277,9 @@ def test_detect_lawyers():
 def test_detect_witness_and_citation():
     assert detect_pws("What did PW-3 and P.W. 11 say in 2025 INSC 529?") == [3, 11]
     assert neutral_citations("What did PW-3 say in 2025 INSC 529?") == ["2025 INSC 529"]
+
+
+def test_court_phrase_words():
+    w = court_phrase_words("In appeals from the Punjab and Haryana High Court, what follows from Section 50 NDPS?")
+    assert {"punjab", "haryana", "appeals", "high", "court"} <= w
+    assert not {"section", "ndps", "follows"} & w     # topic words stay in the query
